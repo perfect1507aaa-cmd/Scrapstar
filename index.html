@@ -216,6 +216,7 @@ function buildSprite(design) {
       else if (p.k === 'box') paintMetal(g, rectPts(p.x, p.y * s, p.w, p.h, p.b ?? 1.5), col, seed, p);
       else if (p.k === 'stripe') paintStripe(g, p.pts.map(([x, y]) => [x, y * s]), p.c || design.acc);
       else if (p.k === 'noz') paintNozzle(g, p.x, p.y * s, p.w, p.h);
+      else if (p.k === 'grime') { const gr = g.createRadialGradient(p.x, p.y * s, 0, p.x, p.y * s, Math.max(p.rx, p.ry)); gr.addColorStop(0, rgb(p.c, 0.4)); gr.addColorStop(1, rgb(p.c, 0)); g.save(); g.translate(p.x, p.y * s); g.scale(1, p.ry / p.rx); g.translate(-p.x, -p.y * s); g.fillStyle = gr; g.beginPath(); g.arc(p.x, p.y * s, p.rx, 0, TAU); g.fill(); g.restore(); }
       else if (p.k === 'win') paintWindows(g, p.x0, p.y0 * s, p.x1, p.y1 * s, p.n, p.c || [150, 200, 255]);
       else if (p.k === 'dish') {
         g.beginPath(); g.arc(p.x, p.y * s, p.r, 0, TAU);
@@ -270,7 +271,10 @@ function genNebula() {
     let t = clamp((b - 0.35) * 1.25 + (big - 0.5) * 1.5, 0, 1);
     t = Math.pow(t, 1.15);
     const k = NEB_PAL.length - 1, fi = t * k, i0 = Math.min(k - 1, fi | 0);
-    let col = mix(NEB_PAL[i0], NEB_PAL[i0 + 1], fi - i0).map(v => v * 0.9);
+    let col = mix(NEB_PAL[i0], NEB_PAL[i0 + 1], fi - i0).map(v => v * 1.12);
+    col = mix(col, [175, 115, 30], sstep(0.6, 0.85, big) * 0.55);
+    // brighter glow toward the upper area and the sun, as in the reference
+    col = mix(col, [190, 130, 45], clamp(0.35 - v / 3 * 0.5, 0, 0.35) * 0.6);
     const wisp = sstep(0.6, 0.8, fbm(u * 1.3 + 9, v * 1.3 + 4, 41, 5)) * 0.12;
     col = mix(col, mauve, wisp);
     const j = (y * w + x) * 4;
@@ -298,27 +302,33 @@ function genSun() {
     const dx = (x - S / 2) / R, dy = (y - S / 2) / R, rr = Math.sqrt(dx * dx + dy * dy);
     if (rr > 1.06) continue;
     const mu = Math.sqrt(Math.max(0, 1 - rr * rr));
-    let col = mix([245, 190, 80], [255, 246, 190], clamp(mu * 1.4, 0, 1));
+    let col = mix([245, 185, 70], [255, 245, 150], clamp(mu * 1.4, 0, 1));
     // cellular mottling: ridged noise makes dark lanes between bright cells
     const cell = 1 - Math.abs(fbm(dx * 1.7 + 4, dy * 1.7 + 1, 83, 4) * 2 - 1);
     const spots = sstep(0.7, 0.95, cell) * (1 - sstep(0.7, 0.95, rr)) * (0.55 + 0.45 * sstep(0.4, -0.4, dy));
     const gran = (fbm(dx * 6, dy * 6, 71, 3) - 0.5) * 0.35;
-    col = mix(col, [200, 120, 40], clamp(spots * 0.6 + gran * 0.4, 0, 0.6));
+    col = mix(col, [230, 170, 70], clamp(spots * 0.7 + gran * 0.4, 0, 0.7));
+    col = mix(col, [205, 125, 45], clamp(spots - 0.6, 0, 0.4));
     col = mix(col, [255, 246, 190], clamp(0.35 - rr, 0, 0.35) * 1.2);
     const j = (y * S + x) * 4;
     d[j] = col[0]; d[j + 1] = col[1]; d[j + 2] = col[2]; d[j + 3] = 255 * (1 - sstep(0.9, 1.05, rr));
   }
   const disc = makeCanvas(S, S), dg = disc.getContext('2d'); dg.putImageData(id, 0, 0);
   let gr = g.createRadialGradient(S / 2, S / 2, R * 0.85, S / 2, S / 2, S / 2);
-  gr.addColorStop(0, 'rgba(255,200,90,0.95)'); gr.addColorStop(0.2, 'rgba(215,150,60,0.6)'); gr.addColorStop(0.55, 'rgba(170,115,45,0.25)'); gr.addColorStop(1, 'rgba(122,84,26,0)');
+  gr.addColorStop(0, 'rgba(235,160,60,1)'); gr.addColorStop(0.3, 'rgba(200,135,50,0.85)'); gr.addColorStop(0.75, 'rgba(180,120,45,0.3)'); gr.addColorStop(1, 'rgba(160,110,40,0)');
   g.fillStyle = gr; g.fillRect(0, 0, S, S);
   g.filter = 'blur(1.2px)'; g.drawImage(disc, 0, 0); g.filter = 'none';
   SUN_SPR = c;
   // curved corona filaments, some bright, some dark
   const rc = makeCanvas(900, 900), rg = rc.getContext('2d'), rr = mulberry(7);
   rg.translate(450, 450);
-  const cav = rg.createRadialGradient(0, 0, 90 * 1.05, 0, 0, 90 * 1.6); cav.addColorStop(0, 'rgba(60,30,5,0.3)'); cav.addColorStop(1, 'rgba(60,30,5,0)');
-  rg.fillStyle = cav; rg.beginPath(); rg.arc(0, 0, 144, 0, TAU); rg.fill();
+  // thin dark petal-like filaments over the bright corona
+  for (let i = 0; i < 26; i++) {
+    const a = rr() * TAU, l = 40 + rr() * 60, w = 0.25 + rr() * 0.25;
+    rg.strokeStyle = 'rgba(90,50,10,0.35)'; rg.lineWidth = 2 + rr();
+    rg.beginPath(); rg.moveTo(Math.cos(a) * 92, Math.sin(a) * 92);
+    rg.quadraticCurveTo(Math.cos(a + w) * (92 + l * 0.7), Math.sin(a + w) * (92 + l * 0.7), Math.cos(a + w * 0.3) * (92 + l), Math.sin(a + w * 0.3) * (92 + l)); rg.stroke();
+  }
   for (let i = 0; i < 46; i++) {
     const a = rr() * TAU, len = 70 + rr() * 70, curve = (rr() - 0.5) * 1.6, dark = rr() < 0.45;
     rg.strokeStyle = dark ? `rgba(70,40,10,${0.14 + rr() * 0.12})` : `rgba(255,${200 + rr() * 40 | 0},130,${0.05 + rr() * 0.07})`;
@@ -361,24 +371,25 @@ function defineDesigns() {
   // Player flagship: blade-shaped gunship curving to the nose, turret row on the left flank,
   // blue-lit side pod on the right, cyan engine block at the stern.
   DESIGNS.corsair = {
-    len: 190, wid: 96, col: [46, 48, 62], acc: [70, 120, 220], seed: 3,
+    len: 190, wid: 96, col: [58, 60, 56], acc: [70, 120, 220], seed: 3,
     parts: [
       { k: 'box', x: -94, y: 0, w: 10, h: 26, c: [60, 110, 118], b: 3 },
       { k: 'noz', x: -99, y: -8, w: 6, h: 8 }, { k: 'noz', x: -99, y: 8, w: 6, h: 8 },
-      { k: 'hull', pts: [[92, -24], [60, -27], [20, -28], [-20, -28], [-52, -27], [-52, 27], [-30, 31], [0, 31], [32, 25], [58, 13], [80, -6]], c: [44, 46, 60] },
-      { k: 'hull', pts: [[72, -21], [20, -23], [-44, -23], [-44, -12], [20, -11], [60, -12]], c: [62, 64, 80] },
-      { k: 'hull', pts: [[30, 20], [0, 26], [-40, 25], [-40, 12], [0, 12], [30, 10]], c: [38, 40, 54] },
+      { k: 'hull', pts: [[92, -24], [60, -27], [20, -28], [-20, -28], [-52, -27], [-52, 27], [-30, 31], [0, 31], [32, 25], [58, 13], [80, -6]], c: [56, 58, 56] },
+      { k: 'hull', pts: [[72, -21], [20, -23], [-44, -23], [-44, -12], [20, -11], [60, -12]], c: [76, 78, 72] },
+      { k: 'hull', pts: [[30, 20], [0, 26], [-40, 25], [-40, 12], [0, 12], [30, 10]], c: [44, 46, 44] },
+      { k: 'grime', x: 10, y: 4, rx: 22, ry: 12, c: [95, 92, 60] }, { k: 'grime', x: -26, y: 14, rx: 16, ry: 9, c: [95, 92, 60] }, { k: 'grime', x: 40, y: -14, rx: 14, ry: 7, c: [110, 100, 64] }, { k: 'grime', x: -34, y: -16, rx: 12, ry: 6, c: [95, 92, 60] },
       { k: 'box', x: -70, y: -2, w: 40, h: 62, c: [96, 104, 134], b: 3 },
       { k: 'win', x0: -84, y0: -20, x1: -58, y1: -20, n: 7, c: [140, 190, 255] }, { k: 'win', x0: -84, y0: -8, x1: -58, y1: -8, n: 7, c: [140, 190, 255] },
       { k: 'win', x0: -84, y0: 4, x1: -58, y1: 4, n: 7, c: [140, 190, 255] }, { k: 'win', x0: -84, y0: 16, x1: -58, y1: 16, n: 7, c: [140, 190, 255] },
       { k: 'box', x: -66, y: 40, w: 26, h: 16, c: [128, 138, 148], b: 3 },
       { k: 'box', x: 62, y: -14, w: 9, h: 7, c: [150, 70, 50] },
       { k: 'stripe', pts: [[54, 8], [0, 24], [-2, 21], [52, 5]], c: [70, 70, 150] },
-      { k: 'box', x: 40, y: -31, w: 12, h: 8, c: [90, 92, 98] }, { k: 'box', x: 8, y: -32, w: 12, h: 8, c: [90, 92, 98] }, { k: 'box', x: -24, y: -32, w: 12, h: 8, c: [90, 92, 98] },
+      { k: 'box', x: 32, y: -31, w: 12, h: 8, c: [90, 92, 98] }, { k: 'box', x: 8, y: -32, w: 12, h: 8, c: [90, 92, 98] }, { k: 'box', x: -16, y: -32, w: 12, h: 8, c: [90, 92, 98] },
     ],
     noz: [[-101, -8], [-101, 8]], engineCol: [67, 200, 207],
-    lights: [[-70, -14, [120, 170, 255]], [-70, 10, [120, 170, 255]], [-66, 40, [224, 254, 249]], [62, -14, [244, 169, 126]], [24, -24, [120, 170, 255]], [-8, -24, [120, 170, 255]], [-40, -30, [255, 60, 40]], [-40, 30, [60, 255, 90]], [-94, 0, [80, 230, 220]]],
-    turrets: [[40, -31], [8, -32], [-24, -32]],
+    lights: [[-70, -14, [120, 170, 255]], [-70, 10, [120, 170, 255]], [-66, 40, [224, 254, 249]], [62, -14, [244, 169, 126]], [20, -24, [120, 170, 255]], [-4, -24, [120, 170, 255]], [-40, -30, [255, 60, 40]], [-40, 30, [60, 255, 90]], [-94, 0, [80, 230, 220]]],
+    turrets: [[32, -31], [8, -32], [-16, -32]],
   };
   DESIGNS.lancer = {
     len: 100, wid: 52, col: [72, 68, 78], acc: [220, 110, 40], seed: 13,
@@ -463,6 +474,7 @@ function defineDesigns() {
     ],
     noz: [[-63, -12], [-63, 12]], lights: [],
   };
+  DESIGNS.st_uta = stationDesign('uta'); DESIGNS.st_civ = stationDesign('civ');
   DESIGNS.cruiser = {
     len: 440, wid: 170, col: [70, 66, 60], acc: [120, 60, 30], seed: 71,
     parts: [
@@ -474,6 +486,23 @@ function defineDesigns() {
     ],
     noz: [], lights: [],
   };
+}
+// ----- stations: big concentric rings, rim tanks, greenhouse (civ) or armour (UTA) segments -----
+function arcPts(r0, r1, a0, a1, n = 10) {
+  const o = []; for (let i = 0; i <= n; i++) { const a = lerp(a0, a1, i / n); o.push([Math.cos(a) * r1, Math.sin(a) * r1]); }
+  for (let i = n; i >= 0; i--) { const a = lerp(a0, a1, i / n); o.push([Math.cos(a) * r0, Math.sin(a) * r0]); }
+  return o;
+}
+function stationDesign(kind) {
+  const civ = kind === 'civ', parts = [], metal = civ ? [118, 118, 108] : [132, 134, 140], acc = civ ? [60, 200, 170] : [190, 50, 40];
+  for (let i = 0; i < 8; i++) { const a = i / 8 * TAU; parts.push({ k: 'hull', pts: arcPts(118, 138, a + 0.05, a + TAU / 8 - 0.05), c: metal, plates: 20 }); }
+  for (let i = 0; i < 8; i++) { const a = i / 8 * TAU + 0.39; parts.push({ k: 'hull', pts: [[Math.cos(a - 0.05) * 60, Math.sin(a - 0.05) * 60], [Math.cos(a - 0.03) * 120, Math.sin(a - 0.03) * 120], [Math.cos(a + 0.03) * 120, Math.sin(a + 0.03) * 120], [Math.cos(a + 0.05) * 60, Math.sin(a + 0.05) * 60]], c: shade(metal, 0.7) }); }
+  for (let i = 0; i < 6; i++) { const a = i / 6 * TAU + 0.2; parts.push({ k: civ ? 'stripe' : 'hull', pts: arcPts(76, 96, a + 0.08, a + TAU / 6 - 0.08, 6), c: civ ? [70, 190, 160] : shade(metal, 0.85) }); }
+  for (let i = 0; i < 12; i++) { const a = i / 12 * TAU; parts.push({ k: 'dish', x: Math.cos(a) * 146, y: Math.sin(a) * 146, r: 8, c: [130, 126, 116] }); }
+  parts.push({ k: 'hull', pts: arcPts(0.1, 58, 0, TAU, 24).slice(0, 25), c: shade(metal, 0.9), plates: 30 });
+  parts.push({ k: 'dish', x: 0, y: 0, r: 26, c: civ ? [90, 200, 190] : [200, 90, 70] });
+  for (let i = 0; i < 4; i++) { const a = i / 4 * TAU + 0.78; parts.push({ k: 'stripe', pts: arcPts(134, 138, a - 0.25, a + 0.25, 6), c: acc }); }
+  return { len: 300, wid: 300, col: metal, acc, seed: civ ? 91 : 97, parts, noz: [], lights: [[0, 0, civ ? [120, 255, 220] : [255, 120, 90]], [138, 0, [255, 60, 40]], [-138, 0, [60, 255, 90]], [0, 138, [255, 220, 120]], [0, -138, [255, 220, 120]]], station: 1 };
 }
 // Background derelict: dark hollow hull shell with a warm rim, visible interior and a fin
 function genHulkBg() {
@@ -628,7 +657,7 @@ const WEAPONS = {
 // hull classes. mounts: [weapon, x, y]
 const CLASSES = {
   corsair: { design: 'corsair', name: 'CORSAIR', size: 3, hull: 332, shield: 611, shRegen: 34, shDelay: 3, armor: 150, reactor: 130, enRegen: 30, thrust: 470, maxV: 280, turn: 2.6, crew: 43, r: 56,
-    mounts: [['focal', 40, -31, 1], ['focal', 8, -32, 1], ['focal', -24, -32, 1], ['pulse', 80, -10], ['pulse', 66, 6], ['srm', -50, 0]] },
+    mounts: [['focal', 32, -31, 1], ['focal', 8, -32, 1], ['focal', -16, -32, 1], ['pulse', 80, -10], ['pulse', 66, 6], ['srm', -50, 0]] },
   skiff: { design: 'skiff', name: 'SKIFF', size: 2, hull: 150, shield: 180, shRegen: 18, shDelay: 3, armor: 60, reactor: 70, enRegen: 24, thrust: 560, maxV: 330, turn: 4.2, crew: 12, r: 30,
     mounts: [['pulse', 36, -5], ['pulse', 36, 5]] },
   lancer: { design: 'lancer', name: 'LANCER', size: 2, hull: 150, shield: 200, shRegen: 18, shDelay: 3, armor: 55, reactor: 80, enRegen: 26, thrust: 560, maxV: 330, turn: 4.2, crew: 12, r: 30,
@@ -649,6 +678,12 @@ Object.assign(CLASSES, {
   p_dart: { ...CLASSES.uta_f, name: 'DART', hull: 110, shield: 110, shRegen: 14, armor: 40, reactor: 60, enRegen: 22, crew: 8, mounts: [['pulse', 34, -4], ['pulse', 34, 4]] },
   p_warden: { ...CLASSES.uta_c, name: 'WARDEN', hull: 320, shield: 340, shRegen: 22, armor: 110, reactor: 110, enRegen: 28, crew: 28, mounts: [['focal', 10, -24, 1], ['focal', 10, 24, 1], ['pulse', 60, -4], ['pulse', 60, 4], ['srm', -20, 0]] },
   p_hauler: { ...CLASSES.civ, name: 'HAULER', hull: 300, shield: 180, shRegen: 12, armor: 100, reactor: 80, enRegen: 22, crew: 20, mounts: [['burst', 54, 0], ['srm', 0, 0]] },
+});
+Object.assign(CLASSES, {
+  st_uta: { design: 'st_uta', name: 'UTA OUTPOST', size: 4, hull: 1800, shield: 1400, shRegen: 25, shDelay: 4, armor: 300, reactor: 1, enRegen: 1, thrust: 0, maxV: 0, turn: 0.04, crew: 60, r: 150, station: 1, range: 640,
+    mounts: [['uta_beam', 128, 0, 1], ['uta_beam', -128, 0, 1], ['uta_pulse', 0, 128, 1], ['uta_pulse', 0, -128, 1], ['uta_pulse', 90, 90, 1], ['uta_pulse', -90, -90, 1]], rez: 240, data: 180, pods: 6 },
+  st_civ: { design: 'st_civ', name: 'COLONY STATION', size: 4, hull: 1500, shield: 1100, shRegen: 20, shDelay: 4, armor: 260, reactor: 1, enRegen: 1, thrust: 0, maxV: 0, turn: 0.03, crew: 50, r: 150, station: 1, range: 560,
+    mounts: [['civ_pulse', 128, 0, 1], ['civ_pulse', -128, 0, 1], ['civ_pulse', 0, 128, 1], ['civ_pulse', 0, -128, 1]], rez: 260, data: 120, pods: 8 },
 });
 const HULLS = [
   ['skiff', 'SKIFF', 220, 8, null, 0], ['lancer', 'LANCER', 260, 10, null, 0],
@@ -683,6 +718,8 @@ const SYSTEMS = [
   { name: 'GRAVEYARD', hue: 270, x: 0.8, y: 0.3, uta: 1, civ: 0, threat: 4, zombie: 3, links: [3, 6] },
   { name: 'UTA CORE', hue: -12, x: 0.88, y: 0.68, uta: 3, civ: 1, threat: 5, zombie: 0, links: [4, 5] },
 ];
+SYSTEMS.forEach((n, i) => { n.station = n.uta > n.civ || i === 5 || i === 6 ? 'uta' : 'civ'; n.stationDead = false; });
+let station = null, dock = false, mission = null;
 SYSTEMS.forEach(n => { n.rep = { uta: -40 + n.civ * 5, civ: 10 + n.civ * 10 }; n.visited = false; });
 SYSTEMS[0].visited = true;
 let rep = SYSTEMS[0].rep, curSys = 0, sysWaves = 0, yard = false, cargoMsgT = 0, tacTab = 0, yardTab = 0, yardSlot = 1, hudInfoT = 0;
@@ -692,7 +729,7 @@ const bboxes = [];
 //  STATE
 // =====================================================================
 let ships = [], shots = [], beams = [], parts = [], smoke = [], rezs = [], orbs = [], pods = [], critters = [], rocks = [], hulks = [], rings = [], shieldFx = [], floaters = [], debris = [], warps = [];
-let fleet = [null, null, null, null, null], player = null;
+let fleet = [null, null, null, null, null], player = null, zaps = [];
 const FLEET_CLASSES = ['corsair', 'skiff', 'lancer', null, null];
 const rebuild = [0, 0, 0, 0, 0];
 const fleetMax = () => 3 + (RLV.command >= 2 ? 1 : 0) + (RLV.command >= 5 ? 1 : 0);
@@ -803,7 +840,7 @@ function fireWeapons(s, dt) {
       for (const other of cannons) other.cool = Math.max(other.cool, w.rof / cannons.length);
       const n = w.pellets || 1;
       for (let i = 0; i < n; i++) {
-        const a = s.a + (Math.random() - 0.5) * w.spread * 2;
+        const a = (m.tur ? m.ang : s.a) + (Math.random() - 0.5) * w.spread * 2;
         shots.push({ k: 'bolt', x, y, vx: Math.cos(a) * w.speed + s.vx, vy: Math.sin(a) * w.speed + s.vy, life: w.life, w, owner: s, fac: s.fac, dmg: w.dmg * resMul(s, 'cannon'), kind: 'cannon' });
       }
       parts.push({ k: 'flash', x, y, vx: s.vx, vy: s.vy, life: 0.07, t: 0, r: 18, col: w.col });
@@ -838,7 +875,7 @@ function fireBeam(s, m, dt) {
   for (const o of ships) if (!o.dead && o !== s && hostile(s.fac, o.fac)) test(o, o.shield > 1 ? o.r * 1.2 : o.r * 0.8, 'ship');
   for (const r of rocks) test(r, r.r * 0.85, 'rock');
   if (s.fac !== FAC.ZOMBIE) for (const c of critters) test(c, 8, 'critter');
-  beams.push({ x, y, hx: x + dx * R, hy: y + dy * R, w, hits: hits.map(h => h[2]), flick: m.x * 0.1 + m.y * 0.07, a: m.ang });
+  beams.push({ x, y, hx: x + dx * R, hy: y + dy * R, w, own: s, hits: hits.map(h => h[2]), flick: m.x * 0.1 + m.y * 0.07, a: m.ang });
   for (const [o, k, t] of hits) {
     const hx = x + dx * t, hy = y + dy * t;
     if (k === 'ship') damage(o, w.dps * dt * resMul(s, 'beam'), 'beam', hx, hy, s);
@@ -912,6 +949,17 @@ function kill(o) {
     for (let i = 0; i < (o.C.pods || 0); i++) { const a = rand(TAU); pods.push({ x: o.x, y: o.y, vx: Math.cos(a) * rand(60, 140) + o.vx * 0.5, vy: Math.sin(a) * rand(60, 140) + o.vy * 0.5, a: rand(TAU), va: rand(-2, 2), crew: 2 + (Math.random() * 4 | 0), t: 0, life: 9 }); }
   }
   for (const c of critters) if (c.host === o) { c.host = null; c.vx = rand(-80, 80); c.vy = rand(-80, 80); }
+  if (o.C.station) {
+    SYSTEMS[curSys].stationDead = true; if (station === o) station = null;
+    rings.push({ x: o.x, y: o.y, r: 60, max: 700, t: 0, life: 1.4, dmg: 120, hit: new Set([o]), shock: 1 });
+    for (let i = 0; i < 6; i++) explode(o.x + rand(-120, 120), o.y + rand(-120, 120), 50, o);
+    if (o.fac === FAC.UTA) { for (let i = 0; i < 3; i++) bps.push({ x: o.x + rand(-60, 60), y: o.y + rand(-60, 60), vx: rand(-80, 80), vy: rand(-80, 80), cls: 'uta_c', t: 0, life: 20, a: rand(TAU) }); rep.uta = Math.max(-100, rep.uta - 25); rep.civ = Math.min(100, rep.civ + 15); banner('UTA OUTPOST DESTROYED', 'Salvage the wreckage — black boxes recovered', [255, 214, 120]); }
+    else { rep.civ = -100; civAngry = true; banner('COLONY STATION DESTROYED', 'Civilians will never forgive this', [255, 120, 100]); }
+  }
+  if (mission && o.lastHitBy && o.lastHitBy.fac === FAC.PLAYER && o.fac === mission.fac && !o.C.station) {
+    mission.got++;
+    if (mission.got >= mission.need) { res.rez = Math.min(res.rezMax, res.rez + mission.rez); gainData(mission.data); rep.civ = Math.min(100, rep.civ + 10); banner('CONTRACT COMPLETE', `+${mission.rez} Rez · +${mission.data} Data · civilian reputation up`, [150, 255, 160]); mission = null; }
+  }
   const fi = fleet.indexOf(o);
   if (fi >= 0) { fleet[fi] = null; rebuild[fi] = 18; if (o === player) { banner('SHIP DESTROYED', 'Switching to the next ship in your fleet', [255, 120, 100]); switchTo(fleet.findIndex(f => f && !f.dead)); } }
 }
@@ -1012,8 +1060,8 @@ function updateLoot(dt) {
         z.tr = 1; const pull = 700 * (1 - d / trR * 0.5);
         z.vx += dx / d * pull * dt; z.vy += dy / d * pull * dt;
         const sp = Math.hypot(z.vx, z.vy); if (sp > 560) { z.vx *= 560 / sp; z.vy *= 560 / sp; }
-        if (d < p.r * 0.7) { z.dead = true; res.cargo += z.v; sfx('pickup', 0.8); floaters.push({ x: p.x + rand(-20, 20), y: p.y - 60, t: 0, text: '+' + z.v + ' REZ', col: [255, 214, 90] }); }
-      } else if (d < trR && res.cargo + z.v > cargoMax && cargoMsgT <= 0) { cargoMsgT = 4; floaters.push({ x: p.x, y: p.y - 80, t: 0, text: 'CARGO FULL — RETURN TO THE WARP BEACON', col: [255, 150, 90] }); }
+        if (d < p.r * 0.7) { z.dead = true; res.cargo += z.v; sfx('pickup', 0.8); addFloater({ x: p.x + rand(-20, 20), y: p.y - 60, t: 0, text: '+' + z.v + ' REZ', col: [255, 214, 90] }); }
+      } else if (d < trR && res.cargo + z.v > cargoMax && cargoMsgT <= 0) { cargoMsgT = 4; addFloater({ x: p.x, y: p.y - 80, t: 0, text: 'CARGO FULL — RETURN TO THE WARP BEACON', col: [255, 150, 90] }); }
     }
   }
   rezs = rezs.filter(z => !z.dead).concat(born);
@@ -1032,7 +1080,7 @@ function updateLoot(dt) {
   // escape pods
   for (const q of pods) {
     q.t += dt; q.x += q.vx * dt; q.y += q.vy * dt; q.a += q.va * dt; q.vx *= Math.exp(-dt * 0.6); q.vy *= Math.exp(-dt * 0.6);
-    if (p) { const dx = p.x - q.x, dy = p.y - q.y, d = Math.hypot(dx, dy); if (d < 260) { q.vx += dx / d * 500 * dt; q.vy += dy / d * 500 * dt; } if (d < p.r * 0.7) { q.dead = true; const take = Math.min(q.crew, p.C.crew - p.crew); p.crew += take; res.goons = Math.min(res.goonsMax, res.goons + q.crew - take); floaters.push({ x: p.x, y: p.y - 70, t: 0, text: '+' + q.crew + ' GOONS', col: [120, 200, 255] }); sfx('pickup', 1); } }
+    if (p) { const dx = p.x - q.x, dy = p.y - q.y, d = Math.hypot(dx, dy); if (d < 260) { q.vx += dx / d * 500 * dt; q.vy += dy / d * 500 * dt; } if (d < p.r * 0.7) { q.dead = true; const take = Math.min(q.crew, p.C.crew - p.crew); p.crew += take; res.goons = Math.min(res.goonsMax, res.goons + q.crew - take); addFloater({ x: p.x, y: p.y - 70, t: 0, text: '+' + q.crew + ' GOONS', col: [120, 200, 255] }); sfx('pickup', 1); } }
     if (q.t > q.life) { q.dead = true; smoke.push({ x: q.x, y: q.y, vx: 0, vy: 0, life: 1, t: 0, r: 10, trail: 1 }); }
   }
   pods = pods.filter(q => !q.dead);
@@ -1052,12 +1100,23 @@ function updateLoot(dt) {
     if (Math.random() < 0.5) parts.push({ k: 'flash', x: lerp(p.x, BEACON.x, Math.random()), y: lerp(p.y, BEACON.y, Math.random()), vx: 0, vy: 0, life: 0.3, t: 0, r: 10, col: [255, 200, 90] });
   }
 }
+function addFloater(f) {
+  const m = /^\+?(\d+)(\s.*)?$/.exec(f.text);
+  if (m) {
+    const lbl = (m[2] || '') + '|' + f.col.join(',');
+    const old = floaters.find(o => o.lbl === lbl && o.t < 0.6 && Math.hypot(o.x - f.x, o.y - f.y) < 120);
+    if (old) { old.val += +m[1]; old.text = (f.text[0] === '+' ? '+' : '') + old.val + (m[2] || ''); old.t = Math.min(old.t, 0.1); return; }
+    f.lbl = lbl; f.val = +m[1];
+  }
+  for (let k = 0; k < 6; k++) { if (!floaters.some(o => Math.abs(o.x - f.x) < 70 && Math.abs(o.y - f.y) < 14)) break; f.y -= 14; }
+  floaters.push(f);
+}
 function gainBlueprint(cls) {
   BP[cls]++; sfx('pickup', 1);
   const h = HULLS.find(q => q[4] === cls);
   if (BP[cls] === h[5]) banner('BLUEPRINT COMPLETE: ' + h[1], 'Build it at the Warp Beacon shipyard (E)', [150, 220, 255]);
-  else if (BP[cls] < h[5]) floaters.push({ x: player.x, y: player.y - 80, t: 0, text: `BLACK BOX · ${h[1]} ${BP[cls]}/${h[5]}`, col: [150, 220, 255] });
-  else { res.data += 20; floaters.push({ x: player.x, y: player.y - 80, t: 0, text: 'BLACK BOX · +20 DATA', col: [200, 140, 255] }); }
+  else if (BP[cls] < h[5]) addFloater({ x: player.x, y: player.y - 80, t: 0, text: `BLACK BOX · ${h[1]} ${BP[cls]}/${h[5]}`, col: [150, 220, 255] });
+  else { res.data += 20; addFloater({ x: player.x, y: player.y - 80, t: 0, text: 'BLACK BOX · +20 DATA', col: [200, 140, 255] }); }
 }
 function gainData(v) {
   res.data += v;
@@ -1070,7 +1129,7 @@ function updateCritters(dt) {
     if (c.host) {
       const h = c.host;[c.x, c.y] = localToWorld(h, c.lx, c.ly); c.vx = h.vx; c.vy = h.vy;
       if (h.shield > 0) { h.shield = Math.max(0, h.shield - 5 * dt); h.shT = 0; if (Math.random() < dt * 3) shieldFx.push({ s: h, a: Math.atan2(c.y - h.y, c.x - h.x), t: 0, pow: 0.5 }); }
-      else if (h.crew > 0) { h.crew = Math.max(0, h.crew - 0.6 * dt); if (h === player) h.hull -= 2 * dt; }
+      else if (h.crew > 0) { h.crew = Math.max(0, h.crew - 0.3 * dt); if (h === player) h.hull -= 2 * dt; }
       else if (h !== player && h.fac !== FAC.ZOMBIE) convert(h);
       else h.hull -= 4 * dt;
       if (h.hull <= 0) kill(h);
@@ -1087,12 +1146,21 @@ function updateCritters(dt) {
     if (c.hp <= 0) { c.dead = true; for (let i = 0; i < 4; i++) spark(c.x, c.y, [200, 120, 255], rand(TAU), 1.5); }
     if (c.t > 60) c.dead = true;
   }
+  for (const s of ships) {
+    if (s.fac !== FAC.PLAYER || s.dead) continue;
+    s.pdT = (s.pdT || rand(1)) - dt;
+    if (s.pdT > 0) continue;
+    const c = critters.find(c => !c.dead && (c.host === s || Math.hypot(c.x - s.x, c.y - s.y) < s.r + 120));
+    if (c) { c.dead = true; s.pdT = s.C.size >= 3 ? 0.9 : 1.4; parts.push({ k: 'spark', x: c.x, y: c.y, vx: 0, vy: 0, life: 0.2, t: 0, col: [120, 220, 255] }); zaps.push({ x0: s.x, y0: s.y, x1: c.x, y1: c.y, t: 0 }); for (let i = 0; i < 4; i++) spark(c.x, c.y, [200, 120, 255], rand(TAU), 1.5); }
+    else s.pdT = 0.3;
+  }
+  for (const z of zaps) z.t += dt; zaps = zaps.filter(z => z.t < 0.15);
   critters = critters.filter(c => !c.dead);
   for (const s of ships) s.critN = 0; for (const c of critters) if (c.host) c.host.critN++;
 }
 function convert(s) {
   s.fac = FAC.ZOMBIE; s.zombified = 1; s.ai.target = null; s.crew = s.C.crew;
-  floaters.push({ x: s.x, y: s.y - 60, t: 0, text: 'SHIP INFECTED', col: [200, 120, 255] });
+  addFloater({ x: s.x, y: s.y - 60, t: 0, text: 'SHIP INFECTED', col: [200, 120, 255] });
   const fi = fleet.indexOf(s); if (fi >= 0) { fleet[fi] = null; rebuild[fi] = 25; }
 }
 function updateFx(dt) {
@@ -1119,8 +1187,8 @@ function updateFx(dt) {
     if (s.dn.t > 0.45) {
       const nums = floaters.filter(f => f.num).length;
       if (nums < 3) {
-        if (s.dn.hu >= 1) floaters.push({ x: s.x + rand(-15, 15), y: s.y - s.r, t: 0, text: String(Math.round(s.dn.hu)), col: [232, 224, 48], size: 12, num: 1 });
-        else if (s.dn.sh >= 1) floaters.push({ x: s.x + rand(-15, 15), y: s.y - s.r, t: 0, text: String(Math.round(s.dn.sh)), col: [64, 208, 224], size: 12, num: 1 });
+        if (s.dn.hu >= 1) addFloater({ x: s.x + rand(-15, 15), y: s.y - s.r, t: 0, text: String(Math.round(s.dn.hu)), col: [232, 224, 48], size: 12, num: 1 });
+        else if (s.dn.sh >= 1) addFloater({ x: s.x + rand(-15, 15), y: s.y - s.r, t: 0, text: String(Math.round(s.dn.sh)), col: [64, 208, 224], size: 12, num: 1 });
       }
       s.dn = null;
     }
@@ -1133,6 +1201,12 @@ function updateFx(dt) {
 // =====================================================================
 function aiShip(s, dt) {
   const ai = s.ai, C = s.C;
+  if (C.station) {
+    s.ctl.mx = s.ctl.my = 0; s.ctl.face = s.a + 1; s.ctl.fire2 = false;
+    ai.t -= dt; if (!ai.target || ai.target.dead || !hostile(s.fac, ai.target.fac) || ai.t < 0) { ai.target = nearestHostile(s, C.range + 250); ai.t = 1; }
+    s.ctl.fire1 = !!ai.target && dist(s, ai.target) < C.range + 120;
+    return;
+  }
   ai.t -= dt;
   s.ctl.fire1 = s.ctl.fire2 = false; s.ctl.stab = false;
   let tgt = ai.target;
@@ -1256,7 +1330,7 @@ function spawnGroup(kind) {
   if (kind === 'civ') banner('CIVILIAN CONVOY', 'Neutral traders passing through', [120, 255, 140]);
 }
 function director(dt) {
-  const hostiles = ships.filter(s => s.fac === FAC.UTA || s.fac === FAC.ZOMBIE).length;
+  const hostiles = ships.filter(s => (s.fac === FAC.UTA || s.fac === FAC.ZOMBIE) && !s.C.station).length;
   waveTimer -= dt;
   if (hostiles === 0 && waveTimer > 6) waveTimer = 6;
   if (waveTimer <= 0 && hostiles < 7) {
@@ -1272,7 +1346,7 @@ function director(dt) {
     if (rebuild[i] <= 0 && res.rez >= 150 && res.goons >= 10) {
       res.rez -= 150; res.goons -= 10; const s = warpIn(FLEET_CLASSES[i], FAC.PLAYER, BEACON.x + rand(-60, 60), BEACON.y + rand(-60, 60), -Math.PI / 2);
       s.slot = i; fleet[i] = s; if (!player || player.dead) switchTo(i);
-      floaters.push({ x: s.x, y: s.y - 60, t: 0, text: FLEET_CLASSES[i].toUpperCase() + ' REBUILT', col: [120, 200, 255] });
+      addFloater({ x: s.x, y: s.y - 60, t: 0, text: FLEET_CLASSES[i].toUpperCase() + ' REBUILT', col: [120, 200, 255] });
     }
   }
 }
@@ -1280,11 +1354,39 @@ function director(dt) {
 // =====================================================================
 //  INPUT ACTIONS
 // =====================================================================
+function nearStation() { return player && station && !station.dead && station.fac === FAC.CIV && dist(player, station) < station.r + 220; }
+function spawnStation() {
+  const n = SYSTEMS[curSys]; station = null;
+  if (n.stationDead) return;
+  const pos = [[-1500, -1100], [1300, -1300], [-1300, 1200], [1500, 1100]][curSys % 4];
+  station = makeShip(n.station === 'uta' ? 'st_uta' : 'st_civ', n.station === 'uta' ? FAC.UTA : FAC.CIV, pos[0], pos[1], 0);
+}
+function missionOffer() {
+  const n = SYSTEMS[curSys], z = n.zombie >= 2 && curSys % 2 === 1;
+  return z ? { fac: FAC.ZOMBIE, need: 3, got: 0, rez: 420, data: 80, text: 'CULL THE INFESTATION: destroy 3 zombie ships' }
+    : { fac: FAC.UTA, need: 3 + n.threat, got: 0, rez: 260 + n.threat * 60, data: 40 + n.threat * 10, text: `BOUNTY: destroy ${3 + n.threat} UTA ships` };
+}
+function dockButtons() {
+  const x0 = W / 2 - 300, y0 = H / 2 - 190, out = [];
+  ['goons', 'repair', 'cargo', 'mission'].forEach((k, i) => out.push({ k, x: x0 + 30, y: y0 + 80 + i * 66, w: 540, h: 54 }));
+  return out;
+}
+function dockAction(k) {
+  if (k === 'goons') { if (res.rez >= 60 && res.goons < res.goonsMax) { res.rez -= 60; res.goons = Math.min(res.goonsMax, res.goons + 12); sfx('pickup', 1); } }
+  else if (k === 'repair') { if (res.rez >= 120) { res.rez -= 120; for (const s of ships) if (s.fac === FAC.PLAYER) { s.hull = s.hullMax; s.armor = s.armor.map(() => s.arMax); } sfx('pickup', 1); } }
+  else if (k === 'cargo') { if (res.cargo > 0) { res.rez = Math.min(res.rezMax, res.rez + Math.floor(res.cargo * 0.8)); res.cargo = 0; sfx('pickup', 1); } }
+  else if (k === 'mission') { if (!mission) { mission = missionOffer(); banner('CONTRACT ACCEPTED', mission.text, [150, 255, 160]); } }
+}
 function nearBeacon() { return player && Math.hypot(player.x - BEACON.x, player.y - BEACON.y) < 320; }
 function onKeyPress(code) {
-  if (code === 'Space' || code === 'Tab') { tactics = !tactics; yard = false; }
-  if (code === 'KeyE') { if (yard) yard = false; else if (nearBeacon()) { yard = true; tactics = false; } else banner('SHIPYARD UNAVAILABLE', 'Fly to the Warp Beacon to refit your ship', [150, 200, 255]); }
-  if (code === 'Escape') tactics = yard = false;
+  if (code === 'Space' || code === 'Tab') { tactics = !tactics; yard = dock = false; }
+  if (code === 'KeyE') {
+    if (yard || dock) yard = dock = false;
+    else if (nearBeacon()) { yard = true; tactics = false; }
+    else if (nearStation()) { if (civAngry) banner('DOCKING REFUSED', 'The colony is hostile to you', [255, 140, 110]); else { dock = true; tactics = false; } }
+    else banner('NOTHING TO DOCK WITH', 'Fly to the Warp Beacon (shipyard) or a colony station', [150, 200, 255]);
+  }
+  if (code === 'Escape') tactics = yard = dock = false;
   const m = /^Digit([1-5])$/.exec(code); if (m && +m[1] <= fleetMax()) switchTo(+m[1] - 1);
 }
 function tacticsButtons() {
@@ -1298,14 +1400,14 @@ function tacticsButtons() {
   }
   return out;
 }
-function canJump() { return sysWaves >= 2 && !ships.some(s => s.fac === FAC.UTA || s.fac === FAC.ZOMBIE); }
+function canJump() { return sysWaves >= 2 && !ships.some(s => (s.fac === FAC.UTA || s.fac === FAC.ZOMBIE) && !s.C.station); }
 function jumpSystem(to) {
   curSys = to; SYSTEMS[to].visited = true; rep = SYSTEMS[to].rep; sysWaves = 0; wave = Math.max(wave, 1); waveTimer = 12;
   recolorSystem(SYSTEMS[to].hue);
   ships = ships.filter(s => s.fac === FAC.PLAYER); rezs = []; orbs = []; pods = []; critters = []; shots = []; smoke = []; parts = []; debris = []; bps = [];
   let k = 0; for (const s of ships) { s.x = -200 + k * 120; s.y = 300 - k * 60; s.vx = s.vy = 0; warps.push({ x: s.x, y: s.y, a: -Math.PI / 2, t: 0 }); k++; }
   if (player) { cam.x = player.x; cam.y = player.y; }
-  civAngry = rep.civ < -20;
+  civAngry = rep.civ < -20; mission = null; spawnStation();
   const n = SYSTEMS[to];
   banner(`${n.name} SYSTEM`, `Threat ${n.threat} · UTA ${'●'.repeat(n.uta) || '—'} · CIV ${'●'.repeat(n.civ) || '—'}${n.zombie >= 3 ? ' · INFESTED' : ''}`, [255, 214, 120]);
 }
@@ -1343,6 +1445,7 @@ function refit(s, k, dir) {
 }
 function onClick() {
   const inB = b => mouse.x > b.x && mouse.x < b.x + b.w && mouse.y > b.y && mouse.y < b.y + b.h;
+  if (dock) { for (const b of dockButtons()) if (inB(b)) dockAction(b.k); return; }
   if (yard && player) {
     for (const b of yardButtons()) if (inB(b)) {
       if (b.kind === 'ytab') yardTab = b.i; else if (b.kind === 'fit') refit(player, b.k, b.dir);
@@ -1364,7 +1467,7 @@ function onClick() {
 //  UPDATE
 // =====================================================================
 function update(dt) {
-  if ((tactics || yard) && !TEST) { mouse.wx = (mouse.x - W / 2) / ZOOM + cam.x; mouse.wy = (mouse.y - H / 2) / ZOOM + cam.y; return; }
+  if ((tactics || yard || dock) && !TEST) { mouse.wx = (mouse.x - W / 2) / ZOOM + cam.x; mouse.wy = (mouse.y - H / 2) / ZOOM + cam.y; return; }
   time += dt;
   if (msg) { msg.t += dt; if (msg.t > 4) msg = null; }
   lowPowerT = Math.max(0, lowPowerT - dt); hudInfoT -= dt;
@@ -1490,16 +1593,6 @@ function drawShip(s) {
   ctx.drawImage(zsp.canvas, -zsp.cw / 2 * k, -zsp.ch / 2 * k, zsp.cw * k, zsp.ch * k);
   if (s.hitT > 0 && s.shield <= 0) { ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = s.hitT * 1.5; ctx.drawImage(sp.canvas, -sp.cw / 2 * k, -sp.ch / 2 * k, sp.cw * k, sp.ch * k); }
   ctx.restore(); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
-  // turrets
-  for (const m of s.mounts) {
-    if (!m.tur) continue;
-    const [tx, ty] = L(m.x, m.y);
-    ctx.save(); ctx.translate(tx, ty); ctx.rotate(m.ang);
-    ctx.fillStyle = '#8c8f94'; ctx.fillRect(0, -2.2 * ZOOM, 16 * ZOOM, 4.4 * ZOOM); ctx.fillStyle = '#d5d6d0'; ctx.fillRect(0, -2.2 * ZOOM, 16 * ZOOM, 1.4 * ZOOM);
-    ctx.fillStyle = '#2a2b2e'; ctx.fillRect(14 * ZOOM, -2.6 * ZOOM, 4 * ZOOM, 5.2 * ZOOM);
-    ctx.beginPath(); ctx.arc(0, 0, 6 * ZOOM, 0, TAU); const gr = ctx.createRadialGradient(-2, -2, 0, 0, 0, 6 * ZOOM); gr.addColorStop(0, '#c9ccd0'); gr.addColorStop(1, '#3b3d42'); ctx.fillStyle = gr; ctx.fill(); ctx.strokeStyle = '#111'; ctx.lineWidth = 0.8; ctx.stroke();
-    ctx.restore();
-  }
   // lights
   ctx.globalCompositeOperation = 'lighter';
   for (const [lx, ly, c] of d.lights) {
@@ -1537,8 +1630,38 @@ function drawShields() {
   }
   ctx.globalCompositeOperation = 'source-over';
 }
+function drawTurrets() {
+  for (const s of ships) {
+    const [x, y] = toS(s.x, s.y); if (x < -300 || x > W + 300 || y < -300 || y > H + 300) continue;
+    const ca = Math.cos(s.a), sa = Math.sin(s.a), big = s.C.station ? 1.6 : 1;
+    for (const m of s.mounts) {
+      if (!m.tur) continue;
+      const tx = x + (m.x * ca - m.y * sa) * ZOOM, ty = y + (m.x * sa + m.y * ca) * ZOOM, z = ZOOM * big;
+      ctx.save(); ctx.translate(tx, ty); ctx.rotate(m.ang);
+      ctx.fillStyle = '#9a9ca0'; ctx.fillRect(0, -2.4 * z, 20 * z, 4.8 * z); ctx.fillStyle = '#e4e5e0'; ctx.fillRect(0, -2.4 * z, 20 * z, 1.6 * z);
+      ctx.fillStyle = '#26272a'; ctx.fillRect(18 * z, -2.8 * z, 4 * z, 5.6 * z);
+      ctx.beginPath(); ctx.arc(0, 0, 6.5 * z, 0, TAU); const gr = ctx.createRadialGradient(-2, -2, 0, 0, 0, 6.5 * z); gr.addColorStop(0, '#d2d4d8'); gr.addColorStop(1, '#3b3d42'); ctx.fillStyle = gr; ctx.fill(); ctx.strokeStyle = '#111'; ctx.lineWidth = 0.8; ctx.stroke();
+      ctx.restore();
+    }
+  }
+  ctx.globalCompositeOperation = 'lighter';
+  for (const z of zaps) { const [a, b] = toS(z.x0, z.y0), [c, d] = toS(z.x1, z.y1); ctx.strokeStyle = `rgba(150,230,255,${1 - z.t / 0.15})`; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(a, b); ctx.lineTo(c, d); ctx.stroke(); glow(c, d, 10, [150, 230, 255], 0.8); }
+  ctx.globalCompositeOperation = 'source-over';
+}
 function drawBeams() {
   ctx.lineCap = 'round';
+  // one continuous rosy band when several parallel beams leave the same ship
+  const groups = new Map(); for (const b of beams) { if (!groups.has(b.own)) groups.set(b.own, []); groups.get(b.own).push(b); }
+  for (const [own, g] of groups) {
+    if (g.length < 2) continue;
+    const pink = g[0].w.col === WEAPONS.focal.col || g[0].w.col === WEAPONS.overload.col; if (!pink) continue;
+    const ux = Math.cos(g[0].a), uy = Math.sin(g[0].a), nx = -uy, ny = ux;
+    let mx = 0, my = 0; for (const b of g) { mx += b.x; my += b.y; } mx /= g.length; my /= g.length;
+    let spread = 0; for (const b of g) spread = Math.max(spread, Math.abs((b.x - mx) * nx + (b.y - my) * ny));
+    const R = g[0].w.range, [x0, y0] = toS(mx, my), [x1, y1] = toS(mx + ux * R, my + uy * R);
+    ctx.strokeStyle = 'rgba(190,60,100,0.28)'; ctx.lineWidth = (spread * 2 * ZOOM + 24 * ZOOM); ctx.lineCap = 'butt';
+    ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke(); ctx.lineCap = 'round';
+  }
   for (const b of beams) { // normal-blend rose haze pushes the amber toward magenta
     const [x, y] = toS(b.x, b.y), [hx, hy] = toS(b.hx, b.hy), pink = b.w.col === WEAPONS.focal.col || b.w.col === WEAPONS.overload.col;
     const c = pink ? [190, 60, 100] : b.w.col;
@@ -1559,13 +1682,19 @@ function drawBeams() {
       const px = x + ux * t * len + nx * off, py = y + uy * t * len + ny * off;
       ctx.strokeStyle = rgb(t < 0.2 ? [255, 130, 50] : [255, 90, 140], 0.35 * (1 - t)); ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px + ux * L, py + uy * L); ctx.stroke();
     }
-    ctx.strokeStyle = rgb(pink ? [255, 212, 208] : w.core, 0.95); ctx.lineWidth = 2.5 * ZOOM; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(hx, hy); ctx.stroke();
+    // orange flame tongues along the first quarter
+    ctx.lineWidth = 2.4 * ZOOM;
+    for (let i = 0; i < 8; i++) { const t = Math.random() * 0.25, L = (10 + Math.random() * 30) * ZOOM, off = (Math.random() - 0.5) * 14 * ZOOM, px = x + ux * t * len + nx * off, py = y + uy * t * len + ny * off; ctx.strokeStyle = rgb([255, 120, 30], 0.5 * (1 - t * 3)); ctx.beginPath(); ctx.moveTo(px, py); ctx.quadraticCurveTo(px + ux * L * 0.5 + nx * off * 0.4, py + uy * L * 0.5 + ny * off * 0.4, px + ux * L, py + uy * L); ctx.stroke(); }
     // flame cloud at the emitter
-    for (let i = 0; i < 6; i++) { const d = i * 8 * ZOOM; glow(x + ux * d + rand(-3, 3), y + uy * d + rand(-3, 3), (24 - i * 2) * ZOOM, [255, 140, 40], 0.5 - i * 0.05); }
+    for (let i = 0; i < 8; i++) { const d = i * 7 * ZOOM; glow(x + ux * d + rand(-4, 4), y + uy * d + rand(-4, 4), (34 - i * 2) * ZOOM, [255, 140, 40], 0.55 - i * 0.05); }
     glow(x, y, 9 * ZOOM, [255, 230, 170], 0.9, 1);
     for (const t of b.hits) { const px = x + ux * t * ZOOM, py = y + uy * t * ZOOM; glow(px, py, 22 * ZOOM, [255, 150, 110], 0.6); glow(px, py, 7 * ZOOM, [255, 240, 225], 1, 1); }
   }
   ctx.globalCompositeOperation = 'source-over';
+  for (const b of beams) { // pink cores stay pink (normal blend)
+    const [x, y] = toS(b.x, b.y), [hx, hy] = toS(b.hx, b.hy), pink = b.w.col === WEAPONS.focal.col || b.w.col === WEAPONS.overload.col;
+    ctx.strokeStyle = rgb(pink ? [255, 212, 208] : b.w.core, 0.95); ctx.lineWidth = 2.5 * ZOOM; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(hx, hy); ctx.stroke();
+  }
 }
 function drawShots() {
   ctx.globalCompositeOperation = 'lighter';
@@ -1820,7 +1949,7 @@ function drawHUD() {
     if (x > -20 && x < W + 20 && y > -20 && y < H + 20) continue;
     const dx = x - W / 2, dy = y - H / 2, sc = Math.min((W / 2 - 40) / Math.abs(dx || 1e-3), (H / 2 - 40) / Math.abs(dy || 1e-3));
     let ex = clamp(W / 2 + dx * sc, 24, W - 24), ey = clamp(H / 2 + dy * sc, 90, H - 30);
-    if (ex < 90 && ey > 400 && ey < 420 + fleetMax() * 62) ey = ey < 400 + fleetMax() * 31 ? 392 : 420 + fleetMax() * 62;
+    if (ex < 110 && ey > 372 && ey < 420 + fleetMax() * 62 + 24) ey = ey < 400 + fleetMax() * 31 ? 372 : 420 + fleetMax() * 62 + 24;
     if (ex < 240 && ey < 260) ey = 272;
     if (ey < 80 && ex < 420) ey = 80;
     if ([145, 597].some(by => Math.hypot(ex - (W - 24), ey - by) < 34)) ex = W - 64;
@@ -1832,11 +1961,12 @@ function drawHUD() {
   for (const k of marks) {
     octagon(k.ex, k.ey, k.r); ctx.fillStyle = 'rgba(30,21,16,0.75)'; ctx.fill(); ctx.lineWidth = 1.5; ctx.strokeStyle = '#5f7f7a'; ctx.stroke();
     ctx.save(); ctx.translate(k.ex, k.ey); ctx.rotate(k.a);
-    if (k.m.ic === 'bp') { ctx.fillStyle = '#96dcff'; ctx.fillRect(-k.r * 0.35, -k.r * 0.35, k.r * 0.7, k.r * 0.7); }
+    if (k.m.ic === 'st_uta' || k.m.ic === 'st_civ') { ctx.rotate(-k.a); ctx.strokeStyle = rgb(k.m.col); ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(0, 0, k.r * 0.5, 0, TAU); ctx.stroke(); ctx.beginPath(); ctx.arc(0, 0, k.r * 0.18, 0, TAU); ctx.fillStyle = rgb(k.m.col); ctx.fill(); }
+    else if (k.m.ic === 'bp') { ctx.fillStyle = '#96dcff'; ctx.fillRect(-k.r * 0.35, -k.r * 0.35, k.r * 0.7, k.r * 0.7); }
     else if (k.m.ic === 'beacon') { ctx.strokeStyle = '#3fb0a8'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(0, 0, k.r * 0.4, 0, TAU); ctx.stroke(); }
     else { ctx.fillStyle = rgb(k.m.col); ctx.beginPath(); ctx.moveTo(k.r * 0.55, 0); ctx.lineTo(-k.r * 0.35, -k.r * 0.42); ctx.lineTo(-k.r * 0.15, 0); ctx.lineTo(-k.r * 0.35, k.r * 0.42); ctx.closePath(); ctx.fill(); }
     ctx.restore();
-    if (k.n > 1) hudText('×' + k.n, k.ex - k.r - 4, k.ey - k.r * 0.6, 9, '#c8c0a8', 0.9, 'right');
+    if (k.n > 1) { const left = k.ex < W / 2; hudText('×' + k.n, k.ex + (left ? k.r + 4 : -k.r - 4), k.ey - k.r * 0.6, 9, '#c8c0a8', 0.9, left ? 'left' : 'right'); }
   }
 
   // aim reticle: 24 dashes that double as the reactor energy ring
@@ -1864,7 +1994,8 @@ function drawHUD() {
     bannerText(msg.title, W / 2, 112, 20, '#ffffff', a, true);
     bannerText(msg.sub, W / 2, 134, 12, rgb(msg.col), a * 0.9, false);
   }
-  const hostiles = ships.filter(s => s.fac === FAC.UTA || s.fac === FAC.ZOMBIE).length;
+  const hostiles = ships.filter(s => (s.fac === FAC.UTA || s.fac === FAC.ZOMBIE) && !s.C.station).length + critters.length;
+  if (mission) hudText(`CONTRACT · ${mission.text.split(':')[0]} ${mission.got}/${mission.need}`, 268, 80, 10, [150, 255, 160], 0.85);
   if (hostiles !== drawHUD.lastH) { drawHUD.lastH = hostiles; hudInfoT = 5; }
   const ia = clamp(hudInfoT, 0, 1);
   if (ia > 0) hudText(hostiles ? `HOSTILES: ${hostiles}` : 'SYSTEM CLEAR', W - 60, 22, 11, hostiles ? [255, 150, 120] : [170, 200, 180], 0.85 * ia, 'right');
@@ -1873,6 +2004,27 @@ function drawHUD() {
   if (nearBeacon() && !yard && !tactics) hudText('[E] SHIPYARD · UNLOADING CARGO', W / 2, H - 60, 13, [150, 220, 255], 0.9, 'center');
   if (tactics) drawTactics();
   if (yard) drawYard();
+  if (dock) drawDock();
+  if (nearStation() && !dock && !yard && !tactics) hudText('[E] DOCK · ' + SYSTEMS[curSys].name + ' COLONY', W / 2, H - 60, 13, [150, 255, 200], 0.9, 'center');
+}
+function drawDock() {
+  const x0 = W / 2 - 300, y0 = H / 2 - 190;
+  ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = 'rgba(12,16,14,0.94)'; ctx.fillRect(x0, y0, 600, 380); ctx.strokeStyle = '#40d0a0'; ctx.lineWidth = 1.5; ctx.strokeRect(x0, y0, 600, 380);
+  techText(SYSTEMS[curSys].name + ' COLONY', x0 + 20, y0 + 26, 15, '#9fc', '#396', '#40d0a0');
+  hudText('E TO UNDOCK', x0 + 580, y0 + 26, 10, [160, 200, 190], 1, 'right');
+  hudText(`REZ ${res.rez | 0} · GOONS ${res.goons | 0} · CARGO ${res.cargo | 0}`, x0 + 20, y0 + 56, 11, [220, 210, 170], 1);
+  const off = missionOffer();
+  const rows = { goons: ['HIRE 12 GOONS', '60 Rez — colonists sign on as crew', res.rez >= 60 && res.goons < res.goonsMax],
+    repair: ['FULL FLEET REPAIR', '120 Rez — hull and armour plates restored', res.rez >= 120],
+    cargo: ['SELL CARGO HERE', `trade ${res.cargo | 0} cargo for ${Math.floor(res.cargo * 0.8)} Rez (the beacon pays 100%)`, res.cargo > 0],
+    mission: mission ? ['CONTRACT IN PROGRESS', `${mission.text} · ${mission.got}/${mission.need}`, false] : ['CONTRACT BOARD', `${off.text} → ${off.rez} Rez + ${off.data} Data`, true] };
+  for (const b of dockButtons()) {
+    const [t, d, ok] = rows[b.k], hov = mouse.x > b.x && mouse.x < b.x + b.w && mouse.y > b.y && mouse.y < b.y + b.h;
+    ctx.fillStyle = hov && ok ? 'rgba(40,90,70,0.95)' : 'rgba(24,30,26,0.95)'; ctx.fillRect(b.x, b.y, b.w, b.h); ctx.strokeStyle = ok ? '#3a9a6a' : '#444'; ctx.strokeRect(b.x, b.y, b.w, b.h);
+    hudText(t, b.x + 14, b.y + 18, 12, ok ? [220, 255, 230] : [150, 160, 150], 1);
+    hudText(d, b.x + 14, b.y + 37, 10, [160, 180, 170], 1, 'left', false);
+  }
 }
 function drawYard() {
   const p = player; if (!p) return;
@@ -1993,6 +2145,7 @@ function render() {
   if (player && !player.dead) drawShip(player);
   drawShots();
   drawBeams();
+  drawTurrets();
   drawShields();
   drawParts();
   drawAtmos();
@@ -2005,6 +2158,7 @@ function render() {
 // =====================================================================
 function setupWorld() {
   const p = fleet[0] = makeShip('corsair', FAC.PLAYER, 0, 0, -Math.PI / 2); p.slot = 0; player = p;
+  spawnStation();
   const w1 = fleet[1] = makeShip('skiff', FAC.PLAYER, -520, -260, Math.PI); w1.slot = 1;
   const w2 = fleet[2] = makeShip('lancer', FAC.PLAYER, -560, 320, Math.PI); w2.slot = 2;
   // rocks to mine
