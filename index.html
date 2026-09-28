@@ -307,10 +307,10 @@ function genSun() {
     const mu = Math.sqrt(Math.max(0, 1 - rr * rr));
     let col = mix([245, 185, 70], [255, 245, 150], clamp(mu * 1.4, 0, 1));
     // cellular mottling: ridged noise makes dark lanes between bright cells
-    const cell = 1 - Math.abs(fbm(dx * 1.7 + 4, dy * 1.7 + 1, 83, 4) * 2 - 1);
-    const spots = sstep(0.7, 0.95, cell) * (1 - sstep(0.7, 0.95, rr)) * (0.55 + 0.45 * sstep(0.4, -0.4, dy));
+    const cell = (1 - Math.abs(fbm(dx * 3.4 + 4, dy * 3.4 + 1, 83, 4) * 2 - 1)) * 0.65 + (1 - Math.abs(fbm(dx * 7 + 2, dy * 7 - 3, 89, 3) * 2 - 1)) * 0.35;
+    const spots = sstep(0.62, 0.85, cell) * (1 - sstep(0.7, 0.95, rr)) * (0.55 + 0.45 * sstep(0.4, -0.4, dy));
     const gran = (fbm(dx * 6, dy * 6, 71, 3) - 0.5) * 0.35;
-    col = mix(col, [185, 110, 40], clamp(spots * 0.7 + gran * 0.35, 0, 0.7));
+    col = mix(col, [170, 100, 35], clamp(spots * 0.75 + gran * 0.35, 0, 0.7));
     col = mix(col, [255, 246, 190], clamp(0.35 - rr, 0, 0.35) * 1.2);
     const j = (y * S + x) * 4;
     d[j] = col[0]; d[j + 1] = col[1]; d[j + 2] = col[2]; d[j + 3] = 255 * (1 - sstep(0.88, 1.06, rr));
@@ -1642,10 +1642,11 @@ function drawShields() {
     const rx = d.len * 0.62 * ZOOM, ry = d.wid * 0.66 * ZOOM, col = f.pop ? [120, 160, 255] : [150, 235, 255];
     ctx.save(); ctx.translate(x, y); ctx.rotate(s.a);
     const la = wrapA(f.a - s.a), hx = Math.cos(la) * rx, hy = Math.sin(la) * ry;
-    const gr = ctx.createRadialGradient(hx, hy, 0, hx, hy, Math.max(rx, ry) * (f.pop ? 2 : 1.1));
+    const gr = ctx.createRadialGradient(hx, hy, 0, hx, hy, Math.max(rx, ry) * (f.pop ? 1.6 : 0.75));
     gr.addColorStop(0, rgb([230, 250, 255], 0.55 * k * f.pow)); gr.addColorStop(0.3, rgb(col, 0.28 * k * f.pow)); gr.addColorStop(1, rgb(col, 0));
     ctx.beginPath(); ctx.ellipse(0, 0, rx, ry, 0, 0, TAU);
     ctx.fillStyle = gr; ctx.fill();
+    const la2 = Math.atan2(hy / ry, hx / rx); ctx.beginPath(); ctx.ellipse(0, 0, rx, ry, 0, la2 - 0.7, la2 + 0.7);
     ctx.strokeStyle = gr; ctx.lineWidth = 2.5 * ZOOM; ctx.stroke();
     ctx.restore();
   }
@@ -1707,13 +1708,23 @@ function drawBeams() {
     ctx.lineWidth = 2.4 * ZOOM;
     for (let i = 0; i < 8; i++) { const t = Math.random() * 0.25, L = (10 + Math.random() * 30) * ZOOM, off = (Math.random() - 0.5) * 14 * ZOOM, px = x + ux * t * len + nx * off, py = y + uy * t * len + ny * off; ctx.strokeStyle = rgb([255, 120, 30], 0.5 * (1 - t * 3)); ctx.beginPath(); ctx.moveTo(px, py); ctx.quadraticCurveTo(px + ux * L * 0.5 + nx * off * 0.4, py + uy * L * 0.5 + ny * off * 0.4, px + ux * L, py + uy * L); ctx.stroke(); }
     // flame cloud at the emitter
-    for (let i = 0; i < 9; i++) { const d = (i * 7 - 30) * ZOOM; glow(x + ux * d + rand(-4, 4), y + uy * d + rand(-4, 4), (40 - Math.abs(i - 4) * 3) * ZOOM, [255, 130, 30], 0.55 - Math.abs(i - 4) * 0.05); }
+    for (let i = 0; i < 9; i++) { const d = (i * 7 - 30) * ZOOM; glow(x + ux * d + rand(-4, 4), y + uy * d + rand(-4, 4), (40 - Math.abs(i - 4) * 3) * ZOOM, [255, 120, 20], 0.4 - Math.abs(i - 4) * 0.04); }
     ctx.lineWidth = 2 * ZOOM;
-    for (let i = 0; i < 12; i++) { const t = Math.random() * 0.4, L = (6 + Math.random() * 8) * ZOOM, off = (Math.random() - 0.5) * 12 * ZOOM, px = x + ux * t * len + nx * off, py = y + uy * t * len + ny * off; ctx.strokeStyle = 'rgba(255,150,60,0.5)'; ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px + ux * L, py + uy * L); ctx.stroke(); }
-    glow(x, y, 9 * ZOOM, [255, 230, 170], 0.9, 1);
+    for (let i = 0; i < 12; i++) { // irregular wispy flame flecks, densest near the emitter
+      const t = Math.pow(Math.random(), 2.2) * 0.4, L = (4 + Math.random() * 14) * ZOOM, off = (Math.random() - 0.5) * 10 * ZOOM, px = x + ux * t * len + nx * off, py = y + uy * t * len + ny * off;
+      const ex = px + ux * L, ey = py + uy * L, bend = Math.random() < 0.3 ? (Math.random() - 0.5) * 8 * ZOOM : 0;
+      const fg = ctx.createLinearGradient(px, py, ex, ey); fg.addColorStop(0, 'rgba(255,150,60,0.55)'); fg.addColorStop(1, 'rgba(255,150,60,0)');
+      ctx.strokeStyle = fg; ctx.lineWidth = (1 + Math.random() * 1.5) * ZOOM; ctx.beginPath(); ctx.moveTo(px, py); ctx.quadraticCurveTo((px + ex) / 2 + nx * bend, (py + ey) / 2 + ny * bend, ex, ey); ctx.stroke();
+    }
+    glow(x, y, 9 * ZOOM, [255, 170, 60], 0.9);
     for (const t of b.hits) { const px = x + ux * t * ZOOM, py = y + uy * t * ZOOM; glow(px, py, 22 * ZOOM, [255, 150, 110], 0.6); glow(px, py, 7 * ZOOM, [255, 240, 225], 1, 1); }
   }
   ctx.globalCompositeOperation = 'source-over';
+  for (const b of beams) { // saturated source-over flame tongues at the emitters
+    const [x, y] = toS(b.x, b.y), ux = Math.cos(b.a), uy = Math.sin(b.a), nx = -uy, ny = ux;
+    for (let i = 0; i < 4; i++) { const L = (18 + Math.random() * 22) * ZOOM, off = (Math.random() - 0.5) * 14 * ZOOM, bx = x - ux * 8 * ZOOM + nx * off, by = y - uy * 8 * ZOOM + ny * off;
+      ctx.fillStyle = 'rgba(230,90,20,0.5)'; ctx.beginPath(); ctx.moveTo(bx + nx * 4 * ZOOM, by + ny * 4 * ZOOM); ctx.quadraticCurveTo(bx + ux * L * 0.5 + nx * off * 0.3, by + uy * L * 0.5 + ny * off * 0.3, bx + ux * L, by + uy * L); ctx.lineTo(bx - nx * 4 * ZOOM, by - ny * 4 * ZOOM); ctx.closePath(); ctx.fill(); }
+  }
   for (const b of beams) { // pink cores stay pink (normal blend)
     const [x, y] = toS(b.x, b.y), [hx, hy] = toS(b.hx, b.hy), pink = b.w.col === WEAPONS.focal.col || b.w.col === WEAPONS.overload.col;
     ctx.strokeStyle = rgb(pink ? [255, 225, 225] : b.w.core, 0.97); ctx.lineWidth = 2 * ZOOM; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(hx, hy); ctx.stroke();
@@ -1832,7 +1843,7 @@ function drawLoot() {
   }
 }
 function drawFloaters() {
-  for (const f of floaters) { const [x, y] = toS(f.x, f.y), a = clamp(1.6 - f.t, 0, 1); hudText(f.text, x, y, f.size || 12, f.col, a, 'center', true, 0.9); }
+  for (const f of floaters) { let [x, y] = toS(f.x, f.y); const a = clamp(1.6 - f.t, 0, 1); if (msg && y > 88 && y < 160 && Math.abs(x - W / 2) < 330) y = 166; hudText(f.text, x, y, f.size || 12, f.col, a, 'center', true, 0.9); }
 }
 function drawAtmos() {
   ctx.globalCompositeOperation = 'screen'; ctx.fillStyle = rgb(HC([120, 80, 25]), 0.08); ctx.fillRect(0, 0, W, H); ctx.globalCompositeOperation = 'source-over';
@@ -1973,7 +1984,7 @@ function drawHUD() {
     const dx = x - W / 2, dy = y - H / 2, sc = Math.min((W / 2 - 40) / Math.abs(dx || 1e-3), (H / 2 - 40) / Math.abs(dy || 1e-3));
     let ex = clamp(W / 2 + dx * sc, 24, W - 24), ey = clamp(H / 2 + dy * sc, 90, H - 30);
     if (ex < 110 && ey > 372 && ey < 420 + fleetMax() * 62 + 24) ey = ey < 400 + fleetMax() * 31 ? 372 : 420 + fleetMax() * 62 + 24;
-    if (ex < 240 && ey < 260) ey = 272;
+    if (ex < 240 && ey < 260) { ey = 90; ex = 430; }
     if (ey < 80 && ex < 420) ey = 80;
     if ([145, 597].some(by => Math.hypot(ex - (W - 24), ey - by) < 34)) ex = W - 64;
     if (ey <= 90) ex = clamp(ex, 430, W - 90);
