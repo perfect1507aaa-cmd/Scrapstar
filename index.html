@@ -311,6 +311,7 @@ function genSun() {
     const spots = sstep(0.62, 0.85, cell) * (1 - sstep(0.7, 0.95, rr)) * (0.55 + 0.45 * sstep(0.4, -0.4, dy));
     const gran = (fbm(dx * 6, dy * 6, 71, 3) - 0.5) * 0.35;
     col = mix(col, [170, 100, 35], clamp(spots * 0.75 + gran * 0.35, 0, 0.7));
+    col = mix(col, [150, 85, 30], sstep(0.65, 0.9, cell) * 0.8 * (1 - sstep(0.75, 0.95, rr)));
     col = mix(col, [255, 246, 190], clamp(0.35 - rr, 0, 0.35) * 1.2);
     const j = (y * S + x) * 4;
     d[j] = col[0]; d[j + 1] = col[1]; d[j + 2] = col[2]; d[j + 3] = 255 * (1 - sstep(0.88, 1.06, rr));
@@ -1712,7 +1713,7 @@ function drawBeams() {
     ctx.lineWidth = 2 * ZOOM;
     for (let i = 0; i < 12; i++) { // irregular wispy flame flecks, densest near the emitter
       const t = Math.pow(Math.random(), 2.2) * 0.4, L = (4 + Math.random() * 14) * ZOOM, off = (Math.random() - 0.5) * 10 * ZOOM, px = x + ux * t * len + nx * off, py = y + uy * t * len + ny * off;
-      const ex = px + ux * L, ey = py + uy * L, bend = Math.random() < 0.3 ? (Math.random() - 0.5) * 8 * ZOOM : 0;
+      const ex = px + ux * L, ey = py + uy * L, bend = Math.random() < 0.5 ? (Math.random() - 0.5) * 10 * ZOOM : 0;
       const fg = ctx.createLinearGradient(px, py, ex, ey); fg.addColorStop(0, 'rgba(255,150,60,0.55)'); fg.addColorStop(1, 'rgba(255,150,60,0)');
       ctx.strokeStyle = fg; ctx.lineWidth = (1 + Math.random() * 1.5) * ZOOM; ctx.beginPath(); ctx.moveTo(px, py); ctx.quadraticCurveTo((px + ex) / 2 + nx * bend, (py + ey) / 2 + ny * bend, ex, ey); ctx.stroke();
     }
@@ -1984,10 +1985,10 @@ function drawHUD() {
     const dx = x - W / 2, dy = y - H / 2, sc = Math.min((W / 2 - 40) / Math.abs(dx || 1e-3), (H / 2 - 40) / Math.abs(dy || 1e-3));
     let ex = clamp(W / 2 + dx * sc, 24, W - 24), ey = clamp(H / 2 + dy * sc, 90, H - 30);
     if (ex < 110 && ey > 372 && ey < 420 + fleetMax() * 62 + 24) ey = ey < 400 + fleetMax() * 31 ? 372 : 420 + fleetMax() * 62 + 24;
-    if (ex < 240 && ey < 260) { ey = 90; ex = 430; }
+    if (ex < 240 && ey < 260) { ey = 90; ex = 460; }
     if (ey < 80 && ex < 420) ey = 80;
     if ([145, 597].some(by => Math.hypot(ex - (W - 24), ey - by) < 34)) ex = W - 64;
-    if (ey <= 90) ex = clamp(ex, 430, W - 90);
+    if (ey <= 90) ex = clamp(ex, 460, W - 90);
     const d = Math.hypot(m.x - cam.x, m.y - cam.y), r = clamp(19 - d / 250, 11, 16);
     const near = marks.find(k => Math.hypot(k.ex - ex, k.ey - ey) < 60);
     if (near) { near.n++; continue; }
